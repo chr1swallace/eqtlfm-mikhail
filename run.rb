@@ -33,7 +33,7 @@ COMMAND = ARGV.shift
 
 def usage()
   # puts OPTIONS
-  puts "Usage: runguess.rb [OPTIONS] COMMAND
+  puts "Usage: run.rb [OPTIONS] COMMAND
 
   COMMANDS are:
       (run things)
@@ -92,6 +92,12 @@ when "prep"
 
 when "guess"
   puts "--- GUESS ---"
+  args = {:job=>COMMAND,
+        :tasks=>'1',
+        :cpus=>'1',
+        :autorun=>OPTIONS[:autorun],
+        :time=>'04:00:00',
+        :excl=>" "}
   comfiles=listfiles(MIKHAILDIR, "results/*/runme.sh")
   resfiles=listfiles(MIKHAILDIR, "results/*/out_500000_features.txt")
   todo=comfiles.map { |f| File.dirname(f) } - resfiles.map { |f| File.dirname(f) }

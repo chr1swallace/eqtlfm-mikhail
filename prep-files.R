@@ -15,8 +15,8 @@ library(randomFunctions) # devtools::install_github("chr1swallace/random-functio
 #DIR="/rds/user/cew54/hpc-work/eqtlfm-mikhail"
 source("~/DIRS.txt")
 DIR=MIKHAILDIR
-EXPRFILE=file.path(DIR,"quantile_normalised_peer_residuals_LCLs.txt")
-ASSOCFILE=file.path(DIR,"all_tested_affinity_expression_associations.txt")
+EXPRFILE=file.path(DIR,"standard_normal_transformed_peer_residuals_LCLs.txt") #quantile_normalised_peer_residuals_LCLs.txt")
+ASSOCFILE=file.path(DIR,"all_tested_affinity_expression_associations_v2.txt")
 GENOFILE=function(i) { file.path(DIR,paste0("jGeno-",i,".vcf.gz")) }
 WINDOW=2e+5 # bp either side of index SNP to consider
 MINP.THRESHOLD=1e-5 # don't fine map if no univariate p < MINP.THRESHOLD

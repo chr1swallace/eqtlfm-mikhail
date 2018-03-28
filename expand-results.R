@@ -24,7 +24,6 @@ options(mc.cores=NCORES)
 ## source("~/DIRS.txt")
 ## DIR=MIKHAILDIR
 ## EXPRFILE=file.path(DIR,"quantile_normalised_peer_residuals_LCLs.txt")
-## ASSOCFILE=file.path(DIR,"all_tested_affinity_expression_associations.txt")
 ## GENOFILE=function(i) { file.path(DIR,paste0("jGeno-",i,".vcf.gz")) }
 ## WINDOW=5e+4 # bp either side of index SNP to consider
 ## MINP.THRESHOLD=1e-5 # don't fine map if no univariate p < MINP.THRESHOLD
@@ -58,6 +57,8 @@ CPPTHR=0.99
 args <- getArgs(list(d="/scratch/cew54/eqtlfm-mikhail/results/ENSG00000204642.2"))
 args <- getArgs(list(d="/scratch/cew54/eqtlfm-mikhail/results/ENSG00000164587"))
 
+args <- getArgs(list(d="/scratch/cew54/eqtlfm-mikhail/results/ENSG00000228802")) #ENSG00000196735"))
+
     message(args$d)
     SKIPFILE <- file.path(args$d,"skip")
     if(file.exists(SKIPFILE))
@@ -73,9 +74,10 @@ args <- getArgs(list(d="/scratch/cew54/eqtlfm-mikhail/results/ENSG00000164587"))
 
     ## trace plot
     ess <- try(read.ess(files))
-    if(class("ess")=="try-error") {
-         message("failed to read guess output for ",args$line)
+    if("try-error" %in% class(ess)) {
+         message("failed to read guess output for ",args$d)
          print(attr(ess,"condition")$message)
+         system(paste0("rm -r ",args$d))
          next
     }
 png(file.path(args$d,"ess.png"),height=6,width=6,units="in",res=300)
