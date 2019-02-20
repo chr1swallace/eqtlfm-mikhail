@@ -15,7 +15,7 @@ library(GUESSFM) # devtools::install_github("chr1swallace/GUESSFM",ref="groups")
 source("~/DIRS.txt")
 DIR=MIKHAILDIR
 EXPRFILE=file.path(DIR,"standard_normal_transformed_peer_residuals_LCLs.txt") #quantile_normalised_peer_residuals_LCLs.txt")
-ASSOCFILE=file.path(DIR,"all_tested_affinity_expression_associations_v4.txt")
+ASSOCFILE=file.path(DIR,"all_tested_affinity_expression_associations_v5.txt")
 GENOFILE=function(i) { file.path(DIR,paste0("jGeno-",i,".vcf.gz")) }
 WINDOW=2e+5 # bp either side of index SNP to consider
 MINP.THRESHOLD=1e-5 # don't fine map if no univariate p < MINP.THRESHOLD
@@ -25,6 +25,7 @@ NSWEEP=500000
 NSAVE=5000
 NCHAINS=5
 NEXP=3
+PROX=Sys.getenv("PROX")  %>%  as.numeric()  %>% as.logical()
 
 PLINK="/home/cew54/localc/bin/plink" # plink binary
 BCFTOOLS="/home/cew54/localc/bin/bcftools" # bcftools binary
@@ -33,38 +34,51 @@ BCFTOOLS="/home/cew54/localc/bin/bcftools" # bcftools binary
 ## OUTDIR="/home/cew54/rds/hpc-work/eqtlfm/working"
 ## data row
 ## todo <- fread(paste0("awk 'NR==1 || NR==",args$row+1,"' ",ASSOCFILE))
-todo <- fread(ASSOCFILE)
-todo <- todo[sig==TRUE,]
-todo2 <- todo[,.(minpos=min(snp_pos),maxpos=max(snp_pos)),by=c("snp_chr","gene_id")]
-todo3 <- todo2[maxpos-minpos>1e+5,]
-todo2 <- todo2[maxpos-minpos<=1e+5,] # for now
-todo2[,myid:=gene_id]
-todo[,myid:=paste(gene_id,1:.N,sep="."),by="gene_id"]
-todo[,minpos:=snp_pos]
-todo[,maxpos:=snp_pos]
-TODO <- rbind(todo2,todo[gene_id %in% todo3$gene_id,colnames(todo2),with=FALSE])
-fwrite(TODO,file="assoc-processed.tab")
+process <- function(todo) {    
+    ss <- strsplit(todo$crm_id,"_")
+    todo[,snp_chr:=sub("chr","",sapply(ss,"[",1))]
+    todo[,snp_pos:=(as.numeric(sapply(ss,"[",2)) + as.numeric(sapply(ss,"[",3)))/2]
+    todo[,snp_pos:=round(snp_pos)]
+    todo2 <- todo[,.(minpos=min(snp_pos),maxpos=max(snp_pos)),by=c("snp_chr","gene_id")]
+    todo3 <- unique(todo2[maxpos-minpos>1e+5,])
+    todo2 <- unique(todo2[maxpos-minpos<=1e+5,]) # for now
+    todo2[,myid:=gene_id]
+    prx <- todo[eprom==TRUE,.(gene_id,snp_pos,proximal_gene_id)]
+    todo[,minpos:=snp_pos]
+    todo[,maxpos:=snp_pos]
+    todo <- unique(todo[,.(snp_chr,gene_id,minpos,maxpos)])
+    todo[,myid:=paste(gene_id,1:.N,sep="."),by="gene_id"]
+    TODO <- unique(rbind(todo2,todo[gene_id %in% todo3$gene_id,colnames(todo2),with=FALSE]))    
+    setnames(prx,"snp_pos","minpos")
+    prx2 <- merge(todo2[,.(gene_id,myid)],prx,by="gene_id")
+    prx3 <- merge(todo[ gene_id %in% todo3$gene_id, .(gene_id,myid,minpos)],prx,by=c("gene_id","minpos"))
+    prx2[,minpos:=NULL]
+    prx3[,minpos:=NULL]
+    prx <- rbind(prx2,prx3)
+    return(list(TODO=TODO,prx=prx))
+}
+
 
 ## add proximal gene - do this separately 
 if(PROX) {
     todo <- fread(ASSOCFILE)
-todo <- todo[sig==TRUE,]
-todo <- todo[eprom==TRUE,]
-todo <- todo[order(proximal_gene_id),]
-todo[,gene_id:=proximal_gene_id]
-todo2 <- todo[,.(minpos=min(snp_pos),maxpos=max(snp_pos)),by=c("snp_chr","gene_id")]
-todo3 <- todo2[maxpos-minpos>1e+5,]
-todo2 <- todo2[maxpos-minpos<=1e+5,] # for now
-todo2[,myid:=gene_id]
-todo[,myid:=paste(gene_id,1:.N,sep="."),by="gene_id"]
-todo[,minpos:=snp_pos]
-todo[,maxpos:=snp_pos]
-TODO <- rbind(todo2,todo[gene_id %in% todo3$gene_id,colnames(todo2),with=FALSE])
-TODO <- unique(TODO,by=c("gene_id","minpos","maxpos"))
-fwrite(TODO,file="assoc-processed-prox.tab")
+    todo <- todo[sig==TRUE & eprom==TRUE,]
+    setnames(todo, c("gene_id","proximal_gene_id"),c("proximal_gene_id","gene_id"))
+    todo <- process(todo)
+    lapply(todo,head)
+    lapply(todo,tail)
+    table(with(todo$TODO,gene_id==myid)) ## all TRUE
+    fwrite(todo$TODO,file="prox-processed.tab")
+} else {
+    todo <- fread(ASSOCFILE)
+    todo <- process(todo[sig==TRUE,])
+    lapply(todo,head)
+    lapply(todo,tail)
+    fwrite(todo$TODO,file="assoc-processed.tab")
+    fwrite(todo$prx,file="assoc-prox.tab")
 }
 
-TODO <- TODO[order(snp_chr,decreasing=TRUE),]
+TODO <- todo$TODO[order(snp_chr,decreasing=TRUE),]
 TODO <- TODO[ !(gene_id %in% c("ENSG00000264266","ENSG00000267314","ENSG00000214015","ENSG0000026556")),]
 # i=42
 ## for(i in sample(1:nrow(TODO))) {
@@ -73,10 +87,13 @@ for(i in (1:nrow(TODO))) {
     message("\n!!!",TODO$myid[i],"\n")
     outd <- file.path(DIR,"results",TODO$myid[i])
     SKIPFILE <- file.path(outd,"skip")
+    ALLFILE <- file.path(outd,"all-data.RData")
     COMFILE <- file.path(outd,"runme.sh")
     if(file.exists(COMFILE) || file.exists(SKIPFILE))
         next
     if(!file.exists(GENOFILE(TODO$snp_chr[i])))
+        next
+    if(file.exists(ALLFILE))
         next
 
     ## read in expression data
@@ -87,10 +104,16 @@ for(i in (1:nrow(TODO))) {
     tmp <- tempfile()
     comm <- paste0(BCFTOOLS," view  -v snps ",GENOFILE(TODO$snp_chr[i]),
                   " --regions ",TODO$snp_chr[i],":",TODO$minpos[i]-WINDOW,"-",TODO$maxpos[i]+WINDOW," -Ob | ",
-                   PLINK," --bcf /dev/stdin --keep-allele-order --vcf-idspace-to _ --const-fid --allow-extra-chr 0 --split-x b37 no-fail --make-bed --out ", tmp)
+                  PLINK," --bcf /dev/stdin --keep-allele-order --vcf-idspace-to _ --const-fid --allow-extra-chr 0 --split-x b37 no-fail --make-bed --out ", tmp)
     system(comm)
+    ## unique snps only
+    snps <- fread(paste0(tmp,".bim"))
+    snps.use <- 1:nrow(snps)
+    dups <- snps$V2[ duplicated(snps$V2) ]
+    if(length(dups))
+        snps.use <- which( !(snps$V2 %in% dups) )
     ## x <- read.plink(tmp)
-    X <- annot.read.plink(tmp)
+    X <- annot.read.plink(tmp, select.snps=snps.use)
     int <- intersect(colnames(expr),rownames(X))
     y <- t(expr[,int,with=FALSE])[,1]
     y <- y-mean(y) # center
@@ -105,7 +128,7 @@ for(i in (1:nrow(TODO))) {
     if(!file.exists(outd)) {
         dir.create(outd,recursive = TRUE)
     }
-    if(min(p) > MINP.THRESHOLD) {
+    if(min(p,na.rm=TRUE) > MINP.THRESHOLD) {
         system(paste("touch",SKIPFILE))
         next()
     }
@@ -136,7 +159,8 @@ for(i in (1:nrow(TODO))) {
         message("after tagging at ",TAG.R2,", matrix now has ",length(unique(tags(tags)))," SNPs.")
         save(tags, file=f.tags)
     }
-    save(DATA,y,file=file.path(outd,"all-data.RData"))
+    save(DATA,y,file=ALLFILE)
+    
     f.data <- file.path(outd,"data.RData")
     f.par <- file.path(outd, "par.xml")
     if(file.exists(f.par) ) {
@@ -145,13 +169,14 @@ for(i in (1:nrow(TODO))) {
     DATA <- DATA[, unique(tags(tags))]
     ## save data
     y <- samples(X)$y
-    save(DATA,y,file=f.data)
-  message("Samples: ", length(y))
-  message("SNPs: ",ncol(DATA))
-  #message("Tags: ",length(unique(tags(tags))))
-
-  coms <- run.bvs(X=DATA,Y=y, #covars=covars,
-                  gdir=outd,nsweep=NSWEEP, family="gaussian",tag.r2=NA,
-                  nsave=NSAVE,nchains=NCHAINS,nexp=NEXP,run=FALSE)
+    snps <- X@snps
+    save(DATA,y,snps,file=f.data)
+    message("Samples: ", length(y))
+    message("SNPs: ",ncol(DATA))
+                                        #message("Tags: ",length(unique(tags(tags))))
+    
+    coms <- run.bvs(X=DATA,Y=y, #covars=covars,
+                    gdir=outd,nsweep=NSWEEP, family="gaussian",tag.r2=NA,
+                    nsave=NSAVE,nchains=NCHAINS,nexp=NEXP,run=FALSE)
     cat(coms,file=COMFILE,sep="\n")
 }

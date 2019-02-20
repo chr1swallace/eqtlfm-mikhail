@@ -18,32 +18,46 @@ cd ~/rds/hpc-work/eqtlfm-mikhail
 # 226 Directory send OK.
 # ftp> mget *
 
-for i in `seq 1 22`; do
-    wget https://www.ebi.ac.uk/arrayexpress/files/E-GEUV-1/GEUVADIS.chr${i}.PH1PH2_465.IMPFRQFILT_BIALLELIC_PH.annotv2.genotypes.vcf.gz
-done
+## --------------------------------------------------------------------------------
 
-# Subset the chr vcf files to individuals with genotype data, select variants with MAF > 0.01, exclude multiallelic snps
-head -n1 quantile_normalised_peer_residuals_LCLs.txt | tr '\t' '\n' | egrep -v 'discard|gene_id' | sort > Samples1
+## skipped
+# for i in `seq 1 22`; do
+#     wget https://www.ebi.ac.uk/arrayexpress/files/E-GEUV-1/GEUVADIS.chr${i}.PH1PH2_465.IMPFRQFILT_BIALLELIC_PH.annotv2.genotypes.vcf.gz
+# done
 
-cat Merged_chromosomes_all_crms_359_LCLs.vcf | head -n 300 | grep HG00096 | tr '\t' '\n' | egrep 'NA|HG' | sort> Samples2
+# # Subset the chr vcf files to individuals with genotype data, select variants with MAF > 0.01, exclude multiallelic snps
+# head -n1 quantile_normalised_peer_residuals_LCLs.txt | tr '\t' '\n' | egrep -v 'discard|gene_id' | sort > Samples1
+head -n1 standard_normal_transformed_peer_residuals_LCLs.txt | tr '\t' '\n' | egrep -v 'discard|gene_id' | sort > Samples1
+
+## replace with Inviduals.txt from
+# ftp://ftpusr90:wrsmtxMH@ftp2.babraham.ac.uk
+# cat Merged_chromosomes_all_crms_359_LCLs.vcf | head -n 300 | grep HG00096 | tr '\t' '\n' | egrep 'NA|HG' | sort> Samples2
+
 comm -12 Samples1 Samples2 > Samples
 wc Samples*
 
+## --------------------------------------------------------------------------------
+
 # VCF="Merged_chromosomes_all_crms_359_LCLs.vcf"
 rm f*.sh
+BCFTOOLS="/home/cew54/localc/bin/bcftools"
+cd $MIKHAILDIR
 for i in `seq 22 -1 1`; do
     # VCF=GEUVADIS.chr${i}.PH1PH2_465.IMPFRQFILT_BIALLELIC_PH.annotv2.genotypes.vcf.gz
     FROM="../eqtlfm/ALL.chr${i}.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.vcf.gz"
     TO="jGeno-${i}.vcf.gz"
     # [[ -f $VCF ]] ||  echo "wget https://www.ebi.ac.uk/arrayexpress/files/E-GEUV-1/GEUVADIS.chr${i}.PH1PH2_465.IMPFRQFILT_BIALLELIC_PH.annotv2.genotypes.vcf.gz" >> f${i}.sh
-    echo "/scratch/wallace/local/bin/bcftools view -S Samples $FROM -Ou | /scratch/wallace/local/bin/bcftools view --min-af 0.01:minor --max-alleles 2 --min-alleles 2 -Oz -o $TO" >> f${i}.sh
-    echo "/scratch/wallace/local/bin/bcftools index $TO" >> f${i}.sh
+    echo "$BCFTOOLS view -S Samples $FROM -Ou | $BCFTOOLS view --min-af 0.01:minor --max-alleles 2 --min-alleles 2 -Oz -o $TO" >> f${i}.sh
+    echo "$BCFTOOLS index $TO" >> f${i}.sh
     if [ ! -f $TO ]; then
 	echo "bash f${i}.sh > f${i}.log 2>&1" >> f.sh
     fi
 done
 qlines.rb -r f.sh
 
+################################################################################
+
+## this part for other projects - skip
 
 ## convert to plink for twas
 for i in `seq 1 22`; do

@@ -9,11 +9,16 @@ load("~/DIRS.txt") # gets MIKHAILDIR
 OPTIONS = {}
 OPTIONS[:int] = false
 OPTIONS[:run] = false
+OPTIONS[:norun] = false
 OptionParser.new do |opts|
-  opts.banner = "Usage: runguess.rb [OPTIONS] COMMAND"
+  opts.banner = "Usage: run.rb [OPTIONS] COMMAND"
 
   opts.on("-i", "--[no-]interactive", "Run each job in serial on the interactive log in node") do |i|
     OPTIONS[:int] = i
+  end
+  
+  opts.on("-n", "--norun", "Don't run any jobs, just print running messages") do |i|
+    OPTIONS[:norun] = i
   end
   
   opts.on("-r", "--autoRun", "Run each job on the queue without user input") do |i|
@@ -40,6 +45,7 @@ def usage()
            prep :: prepare GUESS input
            guess :: run guess
            expand :: expand guess output
+           coloc :: run coloc for a subset of things
 
            clean :: remove slurm files      
   "
@@ -50,10 +56,11 @@ if OPTIONS[:help] then
 end
 
 
-comfile="runguess-#{COMMAND}.sh"
+comfile="run-#{COMMAND}.sh"
 args = {:job=>COMMAND,
         :tasks=>'1',
         :cpus=>'1',
+:time=>'04:00:00',
            :autorun=>OPTIONS[:autorun],
            :excl=>" "}
 
@@ -87,8 +94,10 @@ when "clean"
   end
   
 when "prep"
-  puts "--- prep-files.R ---"
-  commands[0] = "Rscript ./prep-files.R > log/prep-files.log"
+  puts "--- prep-files-v5.R ---"
+  commands[0] = "PROX=0 Rscript ./prep-files-v5.R > log/prep-files-v5-0.log"
+  commands[1] = "PROX=1 Rscript ./prep-files-v5.R > log/prep-files-v5-1.log"
+  # commands[0] = "Rscript ./prep-files-v4.R --args PROP=TRUE > log/prep-files-v4.log"
 
 when "guess"
   puts "--- GUESS ---"
@@ -96,12 +105,17 @@ when "guess"
         :tasks=>'1',
         :cpus=>'1',
         :autorun=>OPTIONS[:autorun],
-        :time=>'04:00:00',
+        :time=>'08:00:00',
         :excl=>" "}
   comfiles=listfiles(MIKHAILDIR, "results/*/runme.sh")
   resfiles=listfiles(MIKHAILDIR, "results/*/out_500000_features.txt")
-  todo=comfiles.map { |f| File.dirname(f) } - resfiles.map { |f| File.dirname(f) }
+  skipfiles=listfiles(MIKHAILDIR, "results/*/skip")
+  todo=comfiles.map { |f| File.dirname(f) } - resfiles.map { |f| File.dirname(f) } - skipfiles.map { |f| File.dirname(f) }
   todo=todo.map { |f| f + "/runme.sh" }
+  puts "guess, wanted: #{comfiles.length}"
+  puts "guess, done: #{resfiles.length}"
+  puts "guess, skip: #{skipfiles.length}"
+  puts "guess, todo: #{todo.length}"
   commands=todo.map { |f| File.read(f).chomp }
 
 when "expand"
@@ -109,14 +123,45 @@ when "expand"
   ffiles=listfiles(MIKHAILDIR,"results/*/out_500000_features.txt")
   done=listfiles(MIKHAILDIR,"results/*/*-nsnp.csv")
   todo = ffiles.map { |f| File.dirname(f) } - done.map { |f| File.dirname(f) }
+  puts "expand, done: #{done.length}"
+  puts "expand, todo: #{todo.length}"
   commands = todo.map { |f| "./expand-results.R --args d=" + f }
-end
 
+when "coloc"
+  puts "--- COLOC ---"
+    args = {:job=>COMMAND,
+        :tasks=>'1',
+        :cpus=>'1',
+        :autorun=>OPTIONS[:autorun],
+        :time=>'1:00:00',
+        :excl=>" "}
+    # com="awk '$3==\"TRUE\" && $14==\"TRUE\" {print $1,$15}' #{MIKHAILDIR}/all_tested_affinity_expression_associations_v3.txt"
+    # com="awk '$3==\"TRUE\" && $6==\"TRUE\" {print $1,$7}' #{MIKHAILDIR}/all_tested_affinity_expression_associations_v5.txt"
+    com="awk -F, '{print $2,$3}' assoc-prox.tab"
+    outfiles = listfiles(MIKHAILDIR, "coloc-v5/*.csv")
+    infiles = listfiles(MIKHAILDIR, "results/*/*-nsnp.csv").map{ |f| File.basename(File.dirname(f)) }
+
+    genes=%x[#{com}].split("\n")
+    genes.each { |gp|
+      g=gp.split(" ")
+      next unless infiles.include? g[0] and infiles.include? g[1]
+      of="#{MIKHAILDIR}/coloc-v5/#{g[0]}-#{g[1]}.csv"
+      commands.push("./coloc-v5.R --args g1=#{g[0]} g2=#{g[1]}") unless outfiles.include? of
+    }
+    puts "coloc todo: #{commands.length}"
+# ENSG00000003402 ENSG00000240344
+# ENSG00000003402 ENSG00000115942
+# ENSG00000003402 ENSG00000183308
+# ENSG00000003402 ENSG00000064012
+
+when "tgz"
+   system("cd #{MIKHAILDIR} && tar zcvf results.tgz results/*/*snpmod-99.RData results/*/*-nsnp.csv results/*/*-mppi.csv */*/skip */*/qcflag */*/ess.png")
+end
 ################################################################################
 
 ## run
 
-if(commands.length > 0) then
+if(commands.length > 0 and !OPTIONS[:norun]) then
   if OPTIONS[:int] then
     puts "RUNNING INTERACTIVELY"
     commands.each { |s|

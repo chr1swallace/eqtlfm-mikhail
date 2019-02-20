@@ -54,15 +54,14 @@ CPPTHR=0.99
 ## todo2 <- rbind(todo2,todo[gene_id %in% todo3$gene_id,colnames(todo2),with=FALSE])
 
 
-args <- getArgs(list(d="/scratch/cew54/eqtlfm-mikhail/results/ENSG00000204642.2"))
-args <- getArgs(list(d="/scratch/cew54/eqtlfm-mikhail/results/ENSG00000164587"))
-
-args <- getArgs(list(d="/scratch/cew54/eqtlfm-mikhail/results/ENSG00000228802")) #ENSG00000196735"))
+args <- getArgs(list(d="/rds/user/cew54/hpc-work/eqtlfm-mikhail/results/ENSG00000138107"))
+## args <- getArgs(list(d="/scratch/cew54/eqtlfm-mikhail/results/ENSG00000164587"))
+## args <- getArgs(list(d="/scratch/cew54/eqtlfm-mikhail/results/ENSG00000228802")) #ENSG00000196735"))
 
     message(args$d)
     SKIPFILE <- file.path(args$d,"skip")
-    if(file.exists(SKIPFILE))
-        next
+    ## if(file.exists(SKIPFILE))
+    ##     next
 
     files <- list.files(args$d,full=TRUE,pattern="_features")
     if(!length(files)) {
