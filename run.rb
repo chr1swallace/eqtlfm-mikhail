@@ -154,6 +154,9 @@ when "coloc"
 # ENSG00000003402 ENSG00000183308
 # ENSG00000003402 ENSG00000064012
 
+when "colocgz"
+   system("cd #{MIKHAILDIR} && cat coloc-v5/*.csv | awk 'NR==1 || $1!=\"nsnps\"' | gzip -c > coloc.gz")
+
 when "tgz"
    system("cd #{MIKHAILDIR} && tar zcvf results.tgz results/*/*snpmod-99.RData results/*/*-nsnp.csv results/*/*-mppi.csv */*/skip */*/qcflag */*/ess.png")
 end
