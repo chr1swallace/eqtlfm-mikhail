@@ -36,3 +36,9 @@ Final output created as
 tar zcvf results-180926.tgz results/*/*-snpmod-99.RData results/*/*-nsnp.csv results/*/*-mppi.csv results/*/*skip results/*/*png coloc
 ```
 
+# Simulations to check coloc for correlated traits
+```{sh}
+qR.rb -y 1-1000 qqsim.R
+```
+
+./qqsim-collate.R
